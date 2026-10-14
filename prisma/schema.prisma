@@ -1,0 +1,239 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String   @default("System Administrator")
+  passwordHash String
+  role         String   @default("SUPER_ADMIN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model BusinessSettings {
+  id           String   @id @default("default")
+  businessName String   @default("Saraswathy Lab & Medicals")
+  address      String   @default("No. 1, 1, Madukkarai Main Rd, Sundarapuram, Coimbatore, Kurichi, Tamil Nadu 641024")
+  phone        String   @default("0422 267 4699")
+  mobile       String   @default("94895 16699")
+  timing       String   @default("7:00 AM – 9:30 PM")
+  email        String   @default("saraswathylab27@gmail.com")
+  mapUrl       String   @default("https://maps.google.com/?q=Saraswathy+Lab+Sundarapuram+Coimbatore")
+  updatedAt    DateTime @updatedAt
+}
+
+model HomepageContent {
+  id                 String   @id @default("default")
+  heroHeading        String   @default("Reliable Diagnostics.\nClearer Health Decisions.")
+  heroSubheading     String   @default("Saraswathy Lab & Medicals provides local, professional diagnostic testing and laboratory services at Sundarapuram, Coimbatore. We deliver accurate findings under strict sanitary protocols.")
+  heroCtaText        String   @default("Book / Send Enquiry")
+  heroCtaLink        String   @default("#contact")
+  heroImage          String?
+  aboutHeading       String   @default("Decades of Medical Diagnostics")
+  aboutDescription   String   @default("Saraswathy Lab & Medicals was built on a simple foundation: bringing reliable diagnostic services closer to the residents of Coimbatore.")
+  aboutImage         String?
+  contactHeading     String   @default("Contact Saraswathy Lab & Medicals")
+  contactDescription String   @default("Use our diagnostic contact form to ask about test preparations, request home phlebotomy visits, or query results.")
+  contactButtonText  String   @default("Submit Diagnostic Enquiry")
+  updatedAt          DateTime @updatedAt
+}
+
+model DiagnosticCategory {
+  id           String           @id @default(uuid())
+  name         String           @unique
+  slug         String           @unique
+  description  String?
+  icon         String           @default("Microscope")
+  displayOrder Int              @default(0)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  tests        DiagnosticTest[]
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model DiagnosticTest {
+  id               String             @id @default(uuid())
+  categoryId       String
+  category         DiagnosticCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name             String
+  slug             String             @unique
+  shortDescription String?
+  overview         String?
+  whoFor           String?
+  preparation      String?
+  displayOrder     Int                @default(0)
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([isActive])
+}
+
+model XRayService {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  bodyPart     String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model ECGService {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  type         String?  @default("Resting 12-Lead")
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model HealthcareInitiative {
+  id               String   @id @default(uuid())
+  title            String
+  slug             String   @unique
+  shortDescription String
+  fullDescription  String?
+  icon             String   @default("Heart")
+  displayOrder     Int      @default(0)
+  isActive         Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model HealthPackage {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  description    String
+  includedTests  String   // Stored as JSON or comma-separated list
+  targetAudience String?
+  displayOrder   Int      @default(0)
+  isActive       Boolean  @default(true)
+  isFeatured     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model GalleryItem {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  imageUrl     String
+  altText      String?
+  category     String   @default("Laboratory")
+  displayOrder Int      @default(0)
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublished])
+}
+
+model Testimonial {
+  id           String   @id @default(uuid())
+  patientName  String
+  reviewText   String
+  rating       Int      @default(5)
+  photoUrl     String?
+  email        String?
+  phone        String?
+  status       String   @default("PENDING") // "PENDING", "PUBLISHED", "REJECTED"
+  consent      Boolean  @default(true)
+  displayOrder Int      @default(0)
+  isPublished  Boolean  @default(false) // Requires admin approval
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublished])
+  @@index([status])
+}
+
+model Enquiry {
+  id                  String   @id @default(uuid())
+  fullName            String
+  email               String
+  phone               String
+  inquiryType         String
+  subject             String
+  message             String
+  status              String   @default("NEW") // "NEW", "READ", "IN_PROGRESS", "REPLIED", "RESOLVED", "ARCHIVED"
+  emailDeliveryStatus String   @default("PENDING") // "PENDING", "SENT", "FAILED"
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model HomeCollectionRequest {
+  id                  String   @id @default(uuid())
+  name                String
+  phone               String
+  address             String
+  preferredDate       String?
+  preferredTime       String?
+  status              String   @default("NEW") // "NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "CANCELLED"
+  emailDeliveryStatus String   @default("PENDING") // "PENDING", "SENT", "FAILED"
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SEOSettings {
+  id              String   @id @default(uuid())
+  pageSlug        String   @unique // "home", "about", "services", etc.
+  metaTitle       String
+  metaDescription String
+  ogTitle         String?
+  ogDescription   String?
+  ogImage         String?
+  keywords        String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([pageSlug])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  adminEmail String
+  action     String   // e.g. "CREATE", "UPDATE", "DELETE", "STATUS_CHANGE"
+  resource   String   // e.g. "DiagnosticTest", "Enquiry", "BusinessSettings"
+  resourceId String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
