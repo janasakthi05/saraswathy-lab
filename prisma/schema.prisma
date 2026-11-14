@@ -31,7 +31,7 @@ model BusinessSettings {
 
 model HomepageContent {
   id                 String   @id @default("default")
-  heroHeading        String   @default("Reliable Diagnostics.\nClearer Health Decisions.")
+  heroHeading        String   @default("Saraswathy Lab and Medicals")
   heroSubheading     String   @default("Saraswathy Lab & Medicals provides local, professional diagnostic testing and laboratory services at Sundarapuram, Coimbatore. We deliver accurate findings under strict sanitary protocols.")
   heroCtaText        String   @default("Book / Send Enquiry")
   heroCtaLink        String   @default("#contact")

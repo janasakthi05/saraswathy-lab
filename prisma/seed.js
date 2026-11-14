@@ -68,7 +68,7 @@ async function main() {
   await prisma.homepageContent.upsert({
     where: { id: 'default' },
     update: {
-      heroHeading: 'Reliable Diagnostics.\nClearer Health Decisions.',
+      heroHeading: 'Saraswathy Lab and Medicals',
       heroSubheading: 'Saraswathy Lab & Medicals provides local, professional diagnostic testing and laboratory services at Sundarapuram, Coimbatore. We deliver accurate findings under strict sanitary protocols.',
       heroCtaText: 'Book / Send Enquiry',
       heroCtaLink: '#contact',
@@ -80,7 +80,7 @@ async function main() {
     },
     create: {
       id: 'default',
-      heroHeading: 'Reliable Diagnostics.\nClearer Health Decisions.',
+      heroHeading: 'Saraswathy Lab and Medicals',
       heroSubheading: 'Saraswathy Lab & Medicals provides local, professional diagnostic testing and laboratory services at Sundarapuram, Coimbatore. We deliver accurate findings under strict sanitary protocols.',
       heroCtaText: 'Book / Send Enquiry',
       heroCtaLink: '#contact',
