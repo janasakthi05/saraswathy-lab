@@ -26,7 +26,7 @@ export default function Hero({ onBookClick, onServicesClick, homepageData, busin
     { value: 'Secure', label: 'Encrypted Records' },
   ];
 
-  const heroHeading = homepageData?.heroHeading || 'Reliable Diagnostics.\nClearer Health Decisions.';
+  const heroHeading = homepageData?.heroHeading || 'Saraswathy Lab and Medicals.';
   const heroSubheading = homepageData?.heroSubheading || 'Saraswathy Lab & Medicals provides local, professional diagnostic testing and laboratory services at Sundarapuram, Coimbatore. We deliver accurate findings under strict sanitary protocols, focusing on clarity, comfort, and patient-first medical care.';
   const ctaText = homepageData?.heroCtaText || 'Book / Send Enquiry';
 
