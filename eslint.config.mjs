@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "node_modules/**",
+    "saraswathy_lab_medicals/**",
+    "scratch/**",
+    "prisma/**",
   ]),
 ]);
 
