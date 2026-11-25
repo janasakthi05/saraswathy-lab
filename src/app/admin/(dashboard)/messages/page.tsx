@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Inbox, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Inbox, AlertCircle, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 interface Inquiry {
   id: string;
@@ -34,6 +34,29 @@ export default function AdminInboxesPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const handleRetryEmail = async (id: string) => {
+    setRetryingId(id);
+    try {
+      const res = await fetch(`/api/admin/inquiries/${id}/retry-email`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInquiries((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, emailDeliveryStatus: 'SENT' } : item))
+        );
+        alert('Notification email successfully sent to administrator!');
+      } else {
+        alert(`Failed to send email:\n${data.error || 'Server error'}`);
+      }
+    } catch (err: any) {
+      alert(`Network error retrying email: ${err.message}`);
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const fetchInquiries = async () => {
     setLoading(true);
@@ -219,17 +242,35 @@ export default function AdminInboxesPage() {
                         >
                           {inq.status}
                         </span>
-                        <span
-                          className={`text-[9px] font-bold block mt-1 uppercase ${
-                            inq.emailDeliveryStatus === 'SENT'
-                              ? 'text-emerald-600'
-                              : inq.emailDeliveryStatus === 'FAILED'
-                              ? 'text-rose-600'
-                              : 'text-slate-400'
-                          }`}
-                        >
-                          Email: {inq.emailDeliveryStatus || 'PENDING'}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span
+                            className={`text-[9px] font-bold block uppercase ${
+                              inq.emailDeliveryStatus === 'SENT'
+                                ? 'text-emerald-600'
+                                : inq.emailDeliveryStatus === 'FAILED'
+                                ? 'text-rose-600'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            Email: {inq.emailDeliveryStatus || 'PENDING'}
+                          </span>
+                          {inq.emailDeliveryStatus === 'FAILED' && (
+                            <button
+                              type="button"
+                              disabled={retryingId === inq.id}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleRetryEmail(inq.id);
+                              }}
+                              className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                              title="Retry sending notification email"
+                            >
+                              <RefreshCw className={`w-2.5 h-2.5 ${retryingId === inq.id ? 'animate-spin' : ''}`} />
+                              <span>{retryingId === inq.id ? 'Retrying...' : 'Retry Email'}</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-4 text-right text-slate-400 font-semibold text-xs whitespace-nowrap">
                         {new Date(inq.createdAt).toLocaleDateString()}

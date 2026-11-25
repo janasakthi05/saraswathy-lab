@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Mail, Clock, AlertCircle, Trash2, ArrowLeft, Copy } from 'lucide-react';
+import { Mail, Clock, AlertCircle, Trash2, ArrowLeft, Copy, RefreshCw } from 'lucide-react';
 
 interface Inquiry {
   id: string;
@@ -26,6 +26,28 @@ export default function AdminInquiryDetailPage() {
   const [error, setError] = useState('');
   const [updating, setUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [retryingEmail, setRetryingEmail] = useState(false);
+
+  const handleRetryEmail = async () => {
+    if (!inquiry) return;
+    setRetryingEmail(true);
+    try {
+      const res = await fetch(`/api/admin/inquiries/${inquiry.id}/retry-email`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInquiry((prev) => (prev ? { ...prev, emailDeliveryStatus: 'SENT' } : null));
+        alert('Notification email sent successfully to administrator!');
+      } else {
+        alert(`Failed to send email:\n${data.error || 'Server error'}`);
+      }
+    } catch (err: any) {
+      alert(`Network error retrying email: ${err.message}`);
+    } finally {
+      setRetryingEmail(false);
+    }
+  };
 
   const fetchInquiryDetail = async () => {
     setLoading(true);
@@ -243,22 +265,55 @@ export default function AdminInquiryDetailPage() {
               </div>
             </div>
             {/* Email Dispatch Info Card */}
-            <div className="flex items-center gap-3 bg-slate-50 p-4.5 rounded-2xl border border-slate-200">
-              <div
-                className={`w-3.5 h-3.5 rounded-full shrink-0 ${
-                  inquiry.emailDeliveryStatus === 'SENT'
-                    ? 'bg-emerald-500'
-                    : inquiry.emailDeliveryStatus === 'FAILED'
-                    ? 'bg-rose-500'
-                    : 'bg-slate-400'
-                }`}
-              />
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase">Email Notification</span>
-                <span className="text-sm font-bold text-slate-900 block mt-0.5">
-                  {inquiry.emailDeliveryStatus || 'PENDING'}
-                </span>
+            <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-3.5 h-3.5 rounded-full shrink-0 ${
+                      inquiry.emailDeliveryStatus === 'SENT'
+                        ? 'bg-emerald-500'
+                        : inquiry.emailDeliveryStatus === 'FAILED'
+                        ? 'bg-rose-500'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 uppercase">Email Notification</span>
+                    <span
+                      className={`text-sm font-bold block mt-0.5 ${
+                        inquiry.emailDeliveryStatus === 'SENT'
+                          ? 'text-emerald-700'
+                          : inquiry.emailDeliveryStatus === 'FAILED'
+                          ? 'text-rose-700'
+                          : 'text-slate-900'
+                      }`}
+                    >
+                      {inquiry.emailDeliveryStatus || 'PENDING'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRetryEmail}
+                  disabled={retryingEmail}
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer shadow-xs disabled:opacity-50 ${
+                    inquiry.emailDeliveryStatus === 'FAILED'
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-600 shadow-rose-600/20'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                  title="Dispatch/resend notification email to administrator"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${retryingEmail ? 'animate-spin' : ''}`} />
+                  <span>{retryingEmail ? 'Sending...' : 'Retry Email'}</span>
+                </button>
               </div>
+
+              {inquiry.emailDeliveryStatus === 'FAILED' && (
+                <div className="text-[11px] text-rose-600 font-medium bg-rose-50 border border-rose-200/80 rounded-xl p-2.5 leading-snug">
+                  The automated notification email could not be delivered. Click <strong>Retry Email</strong> to re-dispatch or check your Vercel email environment variables.
+                </div>
+              )}
             </div>
           </div>
 

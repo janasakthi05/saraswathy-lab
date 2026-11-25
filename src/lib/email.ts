@@ -26,7 +26,7 @@ export async function sendAdminNotification(payload: EmailPayload): Promise<{ su
   const formattedSubject = `New Website Enquiry — ${payload.inquiryType} — ${payload.fullName}`;
   const serverTimestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-  const escapedMessage = payload.message
+  const escapedMessage = (payload.message || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -97,7 +97,7 @@ export async function sendAdminNotification(payload: EmailPayload): Promise<{ su
           <div class="footer">
             <div class="footer-text">
               <strong>Submitted At:</strong> ${serverTimestamp}<br />
-              <strong>Source:</strong> Official Website Contact Form &bull; Coimbatore
+              <strong>Source:</strong> Official Website Contact Form &bull; saraswathylab.com
             </div>
           </div>
         </div>
@@ -107,7 +107,7 @@ export async function sendAdminNotification(payload: EmailPayload): Promise<{ su
 
   const textBody = `
 NEW WEBSITE ENQUIRY
-Saraswathy Lab & Medicals
+Saraswathy Lab & Medicals (saraswathylab.com)
 
 --- PATIENT DETAILS ---
 Name: ${payload.fullName}
@@ -123,53 +123,81 @@ Submitted At: ${serverTimestamp}
 ${payload.message}
   `;
 
-  // 1. Resend API
+  const errors: string[] = [];
+
+  // 1. Primary Service: Resend REST API (Runs over HTTPS port 443 — 100% reliable on Vercel Serverless)
   if (resendApiKey) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const senderFrom = process.env.EMAIL_FROM || 'Saraswathy Lab <onboarding@resend.dev>';
+      console.log(`[Resend] Dispatching email from "${senderFrom}" to "${adminEmail}"...`);
+
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendApiKey.trim()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'Saraswathy Lab <onboarding@resend.dev>',
-          to: [adminEmail],
+          from: senderFrom,
+          to: [adminEmail.trim()],
           reply_to: payload.email,
           subject: formattedSubject,
           html: htmlBody,
           text: textBody,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      const resData = await resendRes.json().catch(() => ({}));
+
       if (resendRes.ok) {
-        console.log(`[Resend] Notification email delivered to: ${adminEmail}`);
-        return { success: true, message: 'Notification email sent successfully.' };
+        console.log(`[Resend Success] Notification email delivered to: ${adminEmail} (ID: ${resData.id})`);
+        return { success: true, message: `Delivered via Resend (ID: ${resData.id})` };
       } else {
-        const errText = await resendRes.text();
-        console.error(`[Resend API Error ${resendRes.status}]:`, errText);
+        const errorMsg = resData.message || JSON.stringify(resData) || `HTTP ${resendRes.status}`;
+        console.error(`[Resend API Error ${resendRes.status}]:`, errorMsg);
+        errors.push(`Resend error (${resendRes.status}): ${errorMsg}`);
       }
     } catch (err: any) {
-      console.error('[Resend Error]', err);
+      console.error('[Resend Network Error]', err.message);
+      errors.push(`Resend network error: ${err.message}`);
     }
+  } else {
+    errors.push('RESEND_API_KEY is not configured');
   }
 
-  // 2. Fallback SMTP (Nodemailer)
+  // 2. Secondary Service: Fallback SMTP (Nodemailer)
   const smtpHost = process.env.SMTP_HOST;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASSWORD;
 
   if (smtpHost && smtpUser && smtpPass) {
     try {
+      const port = parseInt(process.env.SMTP_PORT || '465', 10);
+      const isSecure = port === 465 || process.env.SMTP_SECURE === 'true';
+
       const transporter = nodemailer.createTransport({
         host: smtpHost,
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        secure: process.env.SMTP_SECURE === 'true',
+        port: port,
+        secure: isSecure,
         auth: { user: smtpUser, pass: smtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
       });
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'Saraswathy Lab <enquiries@saraswathylab.com>',
+      // For Gmail or general SMTP, from address must match authenticated user to avoid relay rejection
+      const smtpSender = smtpHost.includes('gmail.com')
+        ? `"Saraswathy Lab & Medicals" <${smtpUser}>`
+        : (process.env.EMAIL_FROM || `"Saraswathy Lab" <${smtpUser}>`);
+
+      const info = await transporter.sendMail({
+        from: smtpSender,
         to: adminEmail,
         replyTo: payload.email,
         subject: formattedSubject,
@@ -177,15 +205,19 @@ ${payload.message}
         html: htmlBody,
       });
 
-      console.log(`[SMTP] Notification email delivered to: ${adminEmail}`);
-      return { success: true, message: 'Notification email sent via SMTP.' };
+      console.log(`[SMTP Success] Notification email delivered to: ${adminEmail} (ID: ${info.messageId})`);
+      return { success: true, message: `Delivered via SMTP (${info.messageId})` };
     } catch (err: any) {
-      console.error('[SMTP Error]', err);
+      console.error('[SMTP Error]', err.message);
+      errors.push(`SMTP error: ${err.message}`);
     }
+  } else {
+    errors.push('SMTP configuration incomplete (missing host, user, or password)');
   }
 
-  console.warn(`[Email Notification] Email transport unconfigured or failed. Stored in DB.`);
-  return { success: false, message: 'Email dispatch stored in DB (Email service unconfigured).' };
+  const finalDiagnostic = errors.join('; ');
+  console.warn(`[Email Notification Failed] ${finalDiagnostic}`);
+  return { success: false, message: finalDiagnostic };
 }
 
 /**
@@ -197,7 +229,7 @@ export async function sendHomeCollectionNotification(payload: HomeCollectionPayl
   const formattedSubject = `New Home Collection Request — ${payload.name} (${payload.phone})`;
   const serverTimestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-  const escapedAddress = payload.address
+  const escapedAddress = (payload.address || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -256,7 +288,7 @@ export async function sendHomeCollectionNotification(payload: HomeCollectionPayl
           <div class="footer">
             <div class="footer-text">
               <strong>Submitted At:</strong> ${serverTimestamp}<br />
-              <strong>Source:</strong> Saraswathy Lab Home Collection Portal
+              <strong>Source:</strong> Saraswathy Lab Home Collection Portal &bull; saraswathylab.com
             </div>
           </div>
         </div>
@@ -266,7 +298,7 @@ export async function sendHomeCollectionNotification(payload: HomeCollectionPayl
 
   const textBody = `
 NEW HOME COLLECTION REQUEST
-Saraswathy Lab & Medicals
+Saraswathy Lab & Medicals (saraswathylab.com)
 
 Name: ${payload.name}
 Phone: ${payload.phone}
@@ -275,30 +307,47 @@ Preferred Timing: ${payload.preferredDate || 'As soon as possible'} ${payload.pr
 Submitted At: ${serverTimestamp}
   `;
 
+  const errors: string[] = [];
+
   if (resendApiKey) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const senderFrom = process.env.EMAIL_FROM || 'Saraswathy Lab <onboarding@resend.dev>';
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendApiKey.trim()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'Saraswathy Lab <onboarding@resend.dev>',
-          to: [adminEmail],
+          from: senderFrom,
+          to: [adminEmail.trim()],
           subject: formattedSubject,
           html: htmlBody,
           text: textBody,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+      const resData = await resendRes.json().catch(() => ({}));
+
       if (resendRes.ok) {
-        console.log(`[Resend] Home collection email delivered to: ${adminEmail}`);
-        return { success: true, message: 'Notification email sent successfully.' };
+        console.log(`[Resend Success] Home collection email delivered to: ${adminEmail}`);
+        return { success: true, message: `Delivered via Resend (ID: ${resData.id})` };
+      } else {
+        const errorMsg = resData.message || JSON.stringify(resData) || `HTTP ${resendRes.status}`;
+        console.error(`[Resend Error ${resendRes.status}]:`, errorMsg);
+        errors.push(`Resend error (${resendRes.status}): ${errorMsg}`);
       }
     } catch (err: any) {
-      console.error('[Resend Error]', err);
+      console.error('[Resend Error]', err.message);
+      errors.push(`Resend network error: ${err.message}`);
     }
+  } else {
+    errors.push('RESEND_API_KEY is not configured');
   }
 
   const smtpHost = process.env.SMTP_HOST;
@@ -307,27 +356,41 @@ Submitted At: ${serverTimestamp}
 
   if (smtpHost && smtpUser && smtpPass) {
     try {
+      const port = parseInt(process.env.SMTP_PORT || '465', 10);
+      const isSecure = port === 465 || process.env.SMTP_SECURE === 'true';
+
       const transporter = nodemailer.createTransport({
         host: smtpHost,
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        secure: process.env.SMTP_SECURE === 'true',
+        port: port,
+        secure: isSecure,
         auth: { user: smtpUser, pass: smtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
       });
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'Saraswathy Lab <enquiries@saraswathylab.com>',
+      const smtpSender = smtpHost.includes('gmail.com')
+        ? `"Saraswathy Lab & Medicals" <${smtpUser}>`
+        : (process.env.EMAIL_FROM || `"Saraswathy Lab" <${smtpUser}>`);
+
+      const info = await transporter.sendMail({
+        from: smtpSender,
         to: adminEmail,
         subject: formattedSubject,
         text: textBody,
         html: htmlBody,
       });
 
-      console.log(`[SMTP] Home collection email delivered to: ${adminEmail}`);
-      return { success: true, message: 'Notification email sent via SMTP.' };
+      console.log(`[SMTP Success] Home collection email delivered to: ${adminEmail}`);
+      return { success: true, message: `Delivered via SMTP (${info.messageId})` };
     } catch (err: any) {
-      console.error('[SMTP Error]', err);
+      console.error('[SMTP Error]', err.message);
+      errors.push(`SMTP error: ${err.message}`);
     }
+  } else {
+    errors.push('SMTP configuration incomplete');
   }
 
-  return { success: false, message: 'Home collection request saved to DB (Email service unconfigured).' };
+  const finalDiagnostic = errors.join('; ');
+  return { success: false, message: finalDiagnostic };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Truck, Search, ChevronLeft, ChevronRight, AlertCircle, Phone, MapPin, Calendar, Clock, Trash2 } from 'lucide-react';
+import { Truck, Search, ChevronLeft, ChevronRight, AlertCircle, Phone, MapPin, Calendar, Clock, Trash2, RefreshCw } from 'lucide-react';
 
 interface HomeCollectionRequest {
   id: string;
@@ -30,6 +30,29 @@ export default function AdminHomeCollectionPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const handleRetryEmail = async (id: string) => {
+    setRetryingId(id);
+    try {
+      const res = await fetch(`/api/admin/home-collection/${id}/retry-email`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRequests((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, emailDeliveryStatus: 'SENT' } : item))
+        );
+        alert('Notification email successfully sent to administrator!');
+      } else {
+        alert(`Failed to send email:\n${data.error || 'Server error'}`);
+      }
+    } catch (err: any) {
+      alert(`Network error retrying email: ${err.message}`);
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -200,8 +223,20 @@ export default function AdminHomeCollectionPage() {
                       <Clock className="w-3.5 h-3.5 text-sky-600" />
                       <span>Preferred: <strong>{reqItem.preferredDate || 'Asap'}</strong> {reqItem.preferredTime ? `(${reqItem.preferredTime})` : ''}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-semibold border-t border-slate-100 pt-1.5">
-                      Submitted: {new Date(reqItem.createdAt).toLocaleString()} &bull; Email: <span className={reqItem.emailDeliveryStatus === 'SENT' ? 'text-emerald-600 font-bold' : 'text-slate-500'}>{reqItem.emailDeliveryStatus}</span>
+                    <div className="text-[10px] text-slate-400 font-semibold border-t border-slate-100 pt-1.5 flex items-center justify-between flex-wrap gap-1">
+                      <span>Submitted: {new Date(reqItem.createdAt).toLocaleString()} &bull; Email: <span className={reqItem.emailDeliveryStatus === 'SENT' ? 'text-emerald-600 font-bold' : reqItem.emailDeliveryStatus === 'FAILED' ? 'text-rose-600 font-bold' : 'text-slate-500'}>{reqItem.emailDeliveryStatus}</span></span>
+                      {reqItem.emailDeliveryStatus === 'FAILED' && (
+                        <button
+                          type="button"
+                          disabled={retryingId === reqItem.id}
+                          onClick={() => handleRetryEmail(reqItem.id)}
+                          className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                          title="Retry sending notification email"
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${retryingId === reqItem.id ? 'animate-spin' : ''}`} />
+                          <span>{retryingId === reqItem.id ? 'Retrying...' : 'Retry'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
